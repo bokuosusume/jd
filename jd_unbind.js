@@ -1,22 +1,21 @@
 /*
-脚本：取关京东店铺和商品
-更新时间：2020-11-22
-因种豆得豆和宠汪汪以及NobyDa大佬的京东签到脚本会关注店铺和商品，故此脚本用来取消已关注的店铺和商品
-默认每运行一次脚本取消关注10个商品，10个店铺。可结合boxjs自定义取消多少个（目前测试通过最大数量是一次性取消300个商品无异常，大于300请自行测试，建议尽量不要一次性全部取消以免出现问题）。
-建议此脚本运行时间在 种豆得豆和宠汪汪脚本运行之后 再执行
-现有功能: 1、取关商品。2、取关店铺。3、匹配到boxjs输入的过滤关键词后，不再进行此商品/店铺后面(包含输入的关键词商品/店铺)的取关。4、支持京东双账号
+注销京东会员卡
+是注销京东已开的店铺会员,不是京东plus会员
+查看已开店铺会员入口:我的=>我的钱包=>卡包
 脚本兼容: Quantumult X, Surge, Loon, JSBox, Node.js
-// Quantumult X
+==========Quantumult X==========
 [task_local]
-#取关京东店铺商品
-55 23 * * * https://raw.githubusercontent.com/lxk0301/jd_scripts/master/jd_unsubscribe.js, tag=取关京东店铺商品, enabled=true
-// Loon
+#注销京东会员卡
+55 23 * * * https://raw.githubusercontent.com/lxk0301/jd_scripts/master/jd_unbind.js, tag=注销京东会员卡, enabled=true
+=======Loon========
 [Script]
-cron "55 23 * * *" script-path=https://raw.githubusercontent.com/lxk0301/jd_scripts/master/jd_unsubscribe.js,tag=取关京东店铺商品
-// Surge
-取关京东店铺商品 = type=cron,cronexp="55 23 * * *",wake-system=1,timeout=20,script-path=https://raw.githubusercontent.com/lxk0301/jd_scripts/master/jd_unsubscribe.js
+cron "55 23 * * *" script-path=https://raw.githubusercontent.com/lxk0301/jd_scripts/master/jd_unbind.js,tag=注销京东会员卡
+========Surge==========
+注销京东会员卡 = type=cron,cronexp="55 23 * * *",wake-system=1,timeout=620,script-path=https://raw.githubusercontent.com/lxk0301/jd_scripts/master/jd_unbind.js
+=======小火箭=====
+注销京东会员卡 = type=cron,script-path=https://raw.githubusercontent.com/lxk0301/jd_scripts/master/jd_unbind.js, cronexpr="10 23 * * *", timeout=200, enable=true
  */
-const $ = new Env('取关京东店铺和商品');
+const $ = new Env('注销京东会员卡');
 //Node.js用户请在jdCookie.js处填写京东ck;
 const jdCookieNode = $.isNode() ? require('./jdCookie.js') : '';
 const notify = $.isNode() ? require('./sendNotify') : '';
@@ -37,15 +36,14 @@ if ($.isNode()) {
   cookiesArr.reverse();
 }
 const jdNotify = $.getdata('jdUnsubscribeNotify');//是否关闭通知，false打开通知推送，true关闭通知推送
-let goodPageSize = $.getdata('jdUnsubscribePageSize') || 20;// 运行一次取消多少个已关注的商品。数字0表示不取关任何商品
-let shopPageSize = $.getdata('jdUnsubscribeShopPageSize') || 20;// 运行一次取消多少个已关注的店铺。数字0表示不取关任何店铺
-let stopGoods = $.getdata('jdUnsubscribeStopGoods') || '';//遇到此商品不再进行取关，此处内容需去商品详情页（自营处）长按拷贝商品信息
-let stopShop = $.getdata('jdUnsubscribeStopShop') || '';//遇到此店铺不再进行取关，此处内容请尽量从头开始输入店铺名称
-const JD_API_HOST = 'https://wq.jd.com/fav';
+let cardPageSize = $.getdata('jdUnsubscribePageSize') || 200;// 运行一次取消多少个会员卡。数字0表示不注销任何会员卡
+let stopCards = $.getdata('jdUnsubscribeStopCards') || ['京东PLUS会员'];//遇到此会员卡不再进行注销
+const JD_API_HOST = 'https://api.m.jd.com/';
 !(async () => {
   if (!cookiesArr[0]) {
-    $.msg('【京东账号一】取关京东店铺商品失败', '【提示】请先获取京东账号一cookie\n直接使用NobyDa的京东签到获取', 'https://bean.m.jd.com/', {"open-url": "https://bean.m.jd.com/"});
+    $.msg('【京东账号一】注销京东会员卡失败', '【提示】请先获取京东账号一cookie\n直接使用NobyDa的京东签到获取', 'https://bean.m.jd.com/', {"open-url": "https://bean.m.jd.com/"});
   }
+  await requireConfig()
   for (let i = 0; i < cookiesArr.length; i++) {
     if (cookiesArr[i]) {
       cookie = cookiesArr[i];
@@ -53,6 +51,8 @@ const JD_API_HOST = 'https://wq.jd.com/fav';
       $.index = i + 1;
       $.isLogin = true;
       $.nickName = '';
+      $.unsubscribeCount = 0
+      $.cardList = []
       await TotalBean();
       console.log(`\n开始【京东账号${$.index}】${$.nickName || $.UserName}\n`);
       if (!$.isLogin) {
@@ -65,8 +65,7 @@ const JD_API_HOST = 'https://wq.jd.com/fav';
         }
         continue
       }
-      await requireConfig();
-      await jdUnsubscribe();
+      await jdUnbind();
       await showMsg();
     }
   }
@@ -77,80 +76,59 @@ const JD_API_HOST = 'https://wq.jd.com/fav';
     .finally(() => {
       $.done();
     })
-async function jdUnsubscribe(doubleKey) {
-  await Promise.all([
-    unsubscribeGoods(doubleKey),
-    unsubscribeShops()
-  ])
-  await Promise.all([
-    getFollowShops(),
-    getFollowGoods()
-  ])
+async function jdUnbind() {
+  await getCards()
+  await unsubscribeCards()
+}
+async function unsubscribeCards() {
+  let count = 0
+  for (let item of $.cardList) {
+    if (count === cardPageSize * 1){
+      console.log(`已达到设定数量:${cardPageSize * 1}`)
+      break
+    }
+    if (stopCards && (item.brandName && stopCards.includes(item.brandName))) {
+      console.log(`匹配到了您设定的会员卡【${item.brandName}】不再进行取消关注会员卡`)
+      continue;
+    }
+    console.log(`去注销会员卡【${item.brandName}】`)
+    let res = await unsubscribeCard(item.brandId);
+    if (res['success']) {
+      if (res['busiCode'] === '200') {
+        count++;
+        $.unsubscribeCount ++
+      }
+    }
+    await $.wait(1000)
+  }
 }
 function showMsg() {
   if (!jdNotify || jdNotify === 'false') {
-    $.msg($.name, ``, `【京东账号${$.index}】${$.nickName}\n【已取消关注店铺】${$.unsubscribeShopsCount}个\n【已取消关注商品】${$.unsubscribeGoodsCount}个\n【还剩关注店铺】${$.shopsTotalNum}个\n【还剩关注商品】${$.goodsTotalNum}个\n`);
+    $.msg($.name, ``, `【京东账号${$.index}】${$.nickName}\n【已注销会员卡】${$.unsubscribeCount}个\n【还剩会员卡】${$.cardsTotalNum-$.unsubscribeCount}个\n`);
   } else {
-    $.log(`\n【京东账号${$.index}】${$.nickName}\n【已取消关注店铺】${$.unsubscribeShopsCount}个\n【已取消关注商品】${$.unsubscribeGoodsCount}个\n【还剩关注店铺】${$.shopsTotalNum}个\n【还剩关注商品】${$.goodsTotalNum}个\n`);
+    $.log(`\n【京东账号${$.index}】${$.nickName}\n【已注销会员卡】${$.unsubscribeCount}个\n【还剩会员卡】${$.cardsTotalNum-$.unsubscribeCount}个\n`);
   }
 }
-function unsubscribeGoods() {
-  return new Promise(async (resolve) => {
-    let followGoods = await getFollowGoods();
-    if (followGoods.iRet === '0') {
-      let count = 0;
-      $.unsubscribeGoodsCount = count;
-      if ((goodPageSize * 1) !== 0) {
-        if (followGoods.totalNum > 0) {
-          for (let item of followGoods.data) {
-
-            console.log(`是否匹配：：${item.commTitle.indexOf(stopGoods.replace(/\ufffc|\s*/g, ''))}`)
-
-            if (stopGoods && item.commTitle.indexOf(stopGoods.replace(/\ufffc|\s*/g, '')) > -1) {
-              console.log(`匹配到了您设定的商品--${stopGoods}，不在进行取消关注商品`)
-              break;
-            }
-            let res = await unsubscribeGoodsFun(item.commId);
-            // console.log('取消关注商品结果', res);
-            if (res.iRet === 0 && res.errMsg === 'success') {
-              console.log(`取消关注商品---${item.commTitle.substring(0, 20).concat('...')}---成功\n`)
-              count ++;
-            } else {
-              console.log(`取消关注商品---${item.commTitle.substring(0, 20).concat('...')}---失败\n`)
-            }
-          }
-          $.unsubscribeGoodsCount = count;
-          resolve(count)
-        } else {
-          resolve(count)
-        }
-      } else {
-        console.log(`\n您设置的是不取关商品\n`);
-        resolve(count);
-      }
-    }
-  })
-}
-function getFollowGoods() {
+function getCards() {
   return new Promise((resolve) => {
     const option = {
-      url: `${JD_API_HOST}/comm/FavCommQueryFilter?cp=1&pageSize=${goodPageSize}&category=0&promote=0&cutPrice=0&coupon=0&stock=0&areaNo=1_72_4139_0&sceneval=2&g_login_type=1&callback=jsonpCBKB&g_ty=ls`,
+      url: `${JD_API_HOST}client.action?functionId=getWalletReceivedCardList`,
+      body: 'body=%7B%22version%22%3A1580659200%7D&build=167490&client=apple&clientVersion=9.3.2&openudid=53f4d9c70c1c81f1c8769d2fe2fef0190a3f60d2&rfs=0000&scope=01&sign=aa00f715800e252fcebcb11573f4a505&st=1608612985755&sv=102',
       headers: {
-        "Host": "wq.jd.com",
+        "Host": "api.m.jd.com",
         "Accept": "*/*",
         "Connection": "keep-alive",
         "Cookie": cookie,
         "User-Agent": $.isNode() ? (process.env.JD_USER_AGENT ? process.env.JD_USER_AGENT : "jdapp;iPhone;9.2.2;14.2;%E4%BA%AC%E4%B8%9C/9.2.2 CFNetwork/1206 Darwin/20.1.0") : ($.getdata('JDUA') ? $.getdata('JDUA') : "jdapp;iPhone;9.2.2;14.2;%E4%BA%AC%E4%B8%9C/9.2.2 CFNetwork/1206 Darwin/20.1.0"),
         "Accept-Language": "zh-cn",
-        "Referer": "https://wqs.jd.com/my/fav/goods_fav.shtml?ptag=37146.4.1&sceneval=2&jxsid=15963530166144677970",
         "Accept-Encoding": "gzip, deflate, br"
       },
     }
-    $.get(option, (err, resp, data) => {
+    $.post(option, (err, resp, data) => {
       try {
-        data = JSON.parse(data.slice(14, -13));
-        $.goodsTotalNum = data.totalNum;
-        // console.log('data', data.data.length)
+        data = JSON.parse(data);
+        $.cardsTotalNum = data.result.cardList ? data.result.cardList.length : 0;
+        $.cardList = data.result.cardList || []
       } catch (e) {
         $.logErr(e, resp);
       } finally {
@@ -159,114 +137,26 @@ function getFollowGoods() {
     });
   })
 }
-function unsubscribeGoodsFun(commId) {
+function unsubscribeCard(vendorId) {
   return new Promise(resolve => {
     const option = {
-      url: `${JD_API_HOST}/comm/FavCommDel?commId=${commId}&_=${Date.now()}&sceneval=2&g_login_type=1&callback=jsonpCBKP&g_ty=ls`,
+      url: `${JD_API_HOST}unBindCard?appid=jd_shop_member&functionId=unBindCard&body=%7B%22venderId%22:%22${vendorId}%22%7D&clientVersion=1.0.0&client=wh5`,
       headers: {
-        "Host": "wq.jd.com",
+        "Host": "api.m.jd.com",
         "Accept": "*/*",
         "Connection": "keep-alive",
+        'origin': 'https://shopmember.m.jd.com',
         'User-Agent': $.isNode() ? (process.env.JD_USER_AGENT ? process.env.JD_USER_AGENT : "jdapp;iPhone;9.2.2;14.2;%E4%BA%AC%E4%B8%9C/9.2.2 CFNetwork/1206 Darwin/20.1.0") : ($.getdata('JDUA') ? $.getdata('JDUA') : "jdapp;iPhone;9.2.2;14.2;%E4%BA%AC%E4%B8%9C/9.2.2 CFNetwork/1206 Darwin/20.1.0"),
-        'Referer': 'https://wqs.jd.com/my/fav/goods_fav.shtml?ptag=37146.4.1&sceneval=2&jxsid=15963530166144677970',
+        'Referer': `https://shopmember.m.jd.com/member/memberCloseAccount?venderId=${vendorId}`,
         'Cookie': cookie,
         "Accept-Language": "zh-cn",
         "Accept-Encoding": "gzip, deflate, br"
       },
     }
-    $.get(option, (err, resp, data) => {
+    $.post(option, (err, resp, data) => {
       try {
-        data = JSON.parse(data.slice(14, -13).replace(',}', '}'));
-        // console.log('data', data);
-        // console.log('data', data.errMsg);
-      } catch (e) {
-        $.logErr(e, resp);
-      } finally {
-        resolve(data);
-      }
-    });
-  })
-}
-
-function unsubscribeShops() {
-  return new Promise(async (resolve) => {
-    let followShops = await getFollowShops();
-    if (followShops.iRet === '0') {
-      let count = 0;
-      $.unsubscribeShopsCount = count;
-      if ((shopPageSize * 1) !== 0) {
-        if (followShops.totalNum > 0) {
-          for (let item of followShops.data) {
-            if (stopShop && (item.shopName && item.shopName.indexOf(stopShop.replace(/\s*/g, '')) > -1)) {
-              console.log(`匹配到了您设定的店铺--${item.shopName}，不在进行取消关注店铺`)
-              break;
-            }
-            let res = await unsubscribeShopsFun(item.shopId);
-            // console.log('取消关注店铺结果', res);
-            if (res.iRet === '0') {
-              console.log(`取消已关注店铺---${item.shopName}----成功\n`)
-              count ++;
-            } else {
-              console.log(`取消已关注店铺---${item.shopName}----失败\n`)
-            }
-          }
-          $.unsubscribeShopsCount = count;
-          resolve(count)
-        } else {
-          resolve(count)
-        }
-      } else {
-        console.log(`\n您设置的是不取关店铺\n`);
-        resolve(count)
-      }
-    }
-  })
-}
-function getFollowShops() {
-  return new Promise((resolve) => {
-    const option = {
-      url: `${JD_API_HOST}/shop/QueryShopFavList?cp=1&pageSize=${shopPageSize}&sceneval=2&g_login_type=1&callback=jsonpCBKA&g_ty=ls`,
-      headers: {
-        "Host": "wq.jd.com",
-        "Accept": "*/*",
-        "Connection": "keep-alive",
-        "Cookie": cookie,
-        "User-Agent": $.isNode() ? (process.env.JD_USER_AGENT ? process.env.JD_USER_AGENT : "jdapp;iPhone;9.2.2;14.2;%E4%BA%AC%E4%B8%9C/9.2.2 CFNetwork/1206 Darwin/20.1.0") : ($.getdata('JDUA') ? $.getdata('JDUA') : "jdapp;iPhone;9.2.2;14.2;%E4%BA%AC%E4%B8%9C/9.2.2 CFNetwork/1206 Darwin/20.1.0"),
-        "Accept-Language": "zh-cn",
-        "Referer": "https://wqs.jd.com/my/fav/shop_fav.shtml?sceneval=2&jxsid=15963530166144677970&ptag=7155.1.9",
-        "Accept-Encoding": "gzip, deflate, br"
-      },
-    }
-    $.get(option, (err, resp, data) => {
-      try {
-        data = JSON.parse(data.slice(14, -13));
-        $.shopsTotalNum = data.totalNum;
-      } catch (e) {
-        $.logErr(e, resp);
-      } finally {
-        resolve(data);
-      }
-    });
-  })
-}
-function unsubscribeShopsFun(shopId) {
-  return new Promise(resolve => {
-    const option = {
-      url: `${JD_API_HOST}/shop/DelShopFav?shopId=${shopId}&_=${Date.now()}&sceneval=2&g_login_type=1&callback=jsonpCBKG&g_ty=ls`,
-      headers: {
-        "Host": "wq.jd.com",
-        "Accept": "*/*",
-        "Connection": "keep-alive",
-        'User-Agent': $.isNode() ? (process.env.JD_USER_AGENT ? process.env.JD_USER_AGENT : "jdapp;iPhone;9.2.2;14.2;%E4%BA%AC%E4%B8%9C/9.2.2 CFNetwork/1206 Darwin/20.1.0") : ($.getdata('JDUA') ? $.getdata('JDUA') : "jdapp;iPhone;9.2.2;14.2;%E4%BA%AC%E4%B8%9C/9.2.2 CFNetwork/1206 Darwin/20.1.0"),
-        'Referer': 'https://wqs.jd.com/my/fav/shop_fav.shtml?sceneval=2&jxsid=15960121319555534107&ptag=7155.1.9',
-        'Cookie': cookie,
-        "Accept-Language": "zh-cn",
-        "Accept-Encoding": "gzip, deflate, br"
-      },
-    }
-    $.get(option, (err, resp, data) => {
-      try {
-        data = JSON.parse(data.slice(14, -13));
+        data = JSON.parse(data)
+        console.log(data.message)
       } catch (e) {
         $.logErr(e, resp);
       } finally {
@@ -317,22 +207,24 @@ function TotalBean() {
 }
 function requireConfig() {
   return new Promise(resolve => {
-    if ($.isNode() && process.env.UN_SUBSCRIBES) {
-      if (process.env.UN_SUBSCRIBES.indexOf('&') > -1) {
-        $.UN_SUBSCRIBES = process.env.UN_SUBSCRIBES.split('&');
-      } else if (process.env.UN_SUBSCRIBES.indexOf('\n') > -1) {
-        $.UN_SUBSCRIBES = process.env.UN_SUBSCRIBES.split('\n');
-      } else if (process.env.UN_SUBSCRIBES.indexOf('\\n') > -1) {
-        $.UN_SUBSCRIBES = process.env.UN_SUBSCRIBES.split('\\n');
-      } else {
-        $.UN_SUBSCRIBES = process.env.UN_SUBSCRIBES.split();
-      }
-      console.log(`您secret设置的取关参数:\n${JSON.stringify($.UN_SUBSCRIBES)}`)
-      goodPageSize = $.UN_SUBSCRIBES[0] || goodPageSize;
-      shopPageSize = $.UN_SUBSCRIBES[1] || shopPageSize;
-      stopGoods = $.UN_SUBSCRIBES[2] || stopGoods;
-      stopShop = $.UN_SUBSCRIBES[3] || stopShop;
+    if ($.isNode() && process.env.UN_BIND_CARD_NUM) {
+      $.UN_BIND_NUM = process.env.UN_BIND_CARD_NUM
     }
+    if ($.isNode() && process.env.UN_BIND_STOP_CARD) {
+      if (process.env.UN_BIND_STOP_CARD.indexOf('&') > -1) {
+        $.UN_BIND_STOP_CARD = process.env.UN_BIND_STOP_CARD.split('&');
+      } if (process.env.UN_BIND_STOP_CARD.indexOf('@') > -1) {
+        $.UN_BIND_STOP_CARD = process.env.UN_BIND_STOP_CARD.split('@');
+      } else if (process.env.UN_BIND_STOP_CARD.indexOf('\n') > -1) {
+        $.UN_BIND_STOP_CARD = process.env.UN_BIND_STOP_CARD.split('\n');
+      } else if (process.env.UN_BIND_STOP_CARD.indexOf('\\n') > -1) {
+        $.UN_BIND_STOP_CARD = process.env.UN_BIND_STOP_CARD.split('\\n');
+      } else {
+        $.UN_BIND_STOP_CARD = process.env.UN_BIND_STOP_CARD.split();
+      }
+    }
+    cardPageSize = $.UN_BIND_NUM || cardPageSize
+    stopCards = $.UN_BIND_STOP_CARD || stopCards
     resolve()
   })
 }
