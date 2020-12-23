@@ -43,4 +43,7 @@ jobs:
           TG_USER_ID: ${{ secrets.TG_USER_ID }}
           DD_BOT_TOKEN: ${{ secrets.DD_BOT_TOKEN }}
           DD_BOT_SECRET: ${{ secrets.DD_BOT_SECRET }}
+          QYWX_KEY:  ${{ secrets.QYWX_KEY }}
+          PUSH_PLUS_TOKEN:  ${{ secrets.PUSH_PLUS_TOKEN }}
+          PUSH_PLUS_USER: ${{ secrets.PUSH_PLUS_USER }} 
           SYNCURL: https://github.com/fq3/github_yangtingxiao_QuantumultX/raw/master/scripts/jd/jd_baiTiao.js
