@@ -1,13 +1,13 @@
-name: 京东进店领豆
+name: 京东取关商品
 
 on:
   workflow_dispatch:
   schedule:
-    - cron: '0 16 * * *'
+    - cron: '45 15 * * *'
   watch:
     types: started
   repository_dispatch:
-    types: jd_shop
+    types: jd_unsubscribe
 jobs:
   build:
     runs-on: ubuntu-latest
@@ -31,11 +31,12 @@ jobs:
           key: ${{ runner.os }}-${{ env.cache-name }}-${{ hashFiles('package-lock.json') }}
       - name: npm install
         run: npm install
-      - name: '运行【京东进店领豆】'
-        run: node jd_shop.js
+      - name: '运行【京东取关商品】'
+        run: node jd_unsubscribe.js
         env:
           JD_COOKIE: ${{ secrets.JD_COOKIE }}
           JD_DEBUG: ${{ secrets.JD_DEBUG }}
+          UN_SUBSCRIBES: ${{ secrets.UN_SUBSCRIBES }}
           PUSH_KEY: ${{ secrets.PUSH_KEY }}
           BARK_PUSH: ${{ secrets.BARK_PUSH }}
           TG_BOT_TOKEN: ${{ secrets.TG_BOT_TOKEN }}

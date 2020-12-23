@@ -1,13 +1,13 @@
-name: 京东进店领豆
+name: 京东种豆得豆
 
 on:
   workflow_dispatch:
   schedule:
-    - cron: '0 16 * * *'
+    - cron: '0 16,23,0-14/1 * * *' # Beijing Time '1 7-21/2 * * *'
   watch:
     types: started
   repository_dispatch:
-    types: jd_shop
+    types: jd_plantBean
 jobs:
   build:
     runs-on: ubuntu-latest
@@ -31,8 +31,8 @@ jobs:
           key: ${{ runner.os }}-${{ env.cache-name }}-${{ hashFiles('package-lock.json') }}
       - name: npm install
         run: npm install
-      - name: '运行【京东进店领豆】'
-        run: node jd_shop.js
+      - name: '运行【京东种豆得豆】'
+        run: node jd_plantBean.js
         env:
           JD_COOKIE: ${{ secrets.JD_COOKIE }}
           JD_DEBUG: ${{ secrets.JD_DEBUG }}
@@ -44,3 +44,4 @@ jobs:
           DD_BOT_TOKEN: ${{ secrets.DD_BOT_TOKEN }}
           DD_BOT_SECRET: ${{ secrets.DD_BOT_SECRET }}
           IGOT_PUSH_KEY: ${{ secrets.IGOT_PUSH_KEY }}
+          PLANT_BEAN_SHARECODES: ${{ secrets.PLANT_BEAN_SHARECODES }}

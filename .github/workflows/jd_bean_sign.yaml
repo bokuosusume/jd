@@ -1,23 +1,26 @@
-name: 京东进店领豆
+name: 京东京豆签到
 
 on:
   workflow_dispatch:
   schedule:
-    - cron: '0 16 * * *'
+    - cron: '0 6,16 * * *'
   watch:
     types: started
   repository_dispatch:
-    types: jd_shop
+    types: jd_bean_sign
 jobs:
   build:
     runs-on: ubuntu-latest
     if: github.event.repository.owner.id == github.event.sender.id
     steps:
+      - name: Checkout
+        uses: actions/checkout@v2
       - name: Checkout github_lxk0301_jd_scripts
         uses: actions/checkout@v2
         with:
           repository: fq3/github_lxk0301_jd_scripts
           ref: master
+          path: scripts
       - name: Use Node.js ${{ matrix.node-version }}
         uses: actions/setup-node@v1
         with:
@@ -30,12 +33,19 @@ jobs:
           path: node_modules
           key: ${{ runner.os }}-${{ env.cache-name }}-${{ hashFiles('package-lock.json') }}
       - name: npm install
-        run: npm install
-      - name: '运行【京东进店领豆】'
-        run: node jd_shop.js
+        run: |
+          cd scripts
+          npm install
+      - name: '运行【京东京豆签到】'
+        run: |
+          cd scripts
+          node jd_bean_sign.js
         env:
           JD_COOKIE: ${{ secrets.JD_COOKIE }}
           JD_DEBUG: ${{ secrets.JD_DEBUG }}
+          JD_BEAN_STOP: ${{secrets.JD_BEAN_STOP}}
+          JD_BEAN_SIGN_STOP_NOTIFY: ${{secrets.JD_BEAN_SIGN_STOP_NOTIFY}}
+          JD_BEAN_SIGN_NOTIFY_SIMPLE: ${{secrets.JD_BEAN_SIGN_NOTIFY_SIMPLE}}
           PUSH_KEY: ${{ secrets.PUSH_KEY }}
           BARK_PUSH: ${{ secrets.BARK_PUSH }}
           TG_BOT_TOKEN: ${{ secrets.TG_BOT_TOKEN }}
